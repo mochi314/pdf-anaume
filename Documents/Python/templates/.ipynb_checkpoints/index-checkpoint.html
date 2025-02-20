@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 変換ツール</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin: 20px; }
+        #preview { margin-top: 20px; max-width: 100%; }
+        #download { display: none; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>PDF 変換ツール</h1>
+    
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" id="fileInput" accept=".pdf" required>
+        <button type="submit">アップロードして変換</button>
+    </form>
+
+    <img id="preview" style="display:none;" />
+    <a id="download" href="#" download>変換されたPDFをダウンロード</a>
+
+    <script>
+        document.getElementById("fileInput").addEventListener("change", function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const objectURL = URL.createObjectURL(file);
+                document.getElementById("preview").src = objectURL;
+                document.getElementById("preview").style.display = "block";
+            }
+        });
+
+        document.getElementById("uploadForm").addEventListener("submit", function() {
+            document.getElementById("download").style.display = "none";
+        });
+
+        document.getElementById("uploadForm").addEventListener("submit", function(event) {
+            event.preventDefault();
+            const formData = new FormData(this);
+            fetch("/upload", { method: "POST", body: formData })
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = URL.createObjectURL(blob);
+                    const link = document.getElementById("download");
+                    link.href = url;
+                    link.style.display = "block";
+                });
+        });
+    </script>
+</body>
+</html>
