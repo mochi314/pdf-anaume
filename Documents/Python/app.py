@@ -118,4 +118,6 @@ def process_pdf(input_pdf, output_pdf):
     doc.save(output_pdf)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    from os import environ
+    port = int(environ.get("PORT", 10000))  # 環境変数 PORT を使用
+    app.run(host="0.0.0.0", port=port, debug=False)
