@@ -1,3 +1,0 @@
-Flask==2.1.2
-PyMuPDF==1.20.2
-Werkzeug==2.1.1
