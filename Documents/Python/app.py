@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
+import fitz  # PyMuPDF
 from flask import Flask, request, send_file, render_template
 from werkzeug.utils import secure_filename
-from PyPDF2 import PdfReader, PdfWriter
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfbase import pdfmetrics
-from reportlab.lib.pagesizes import letter
 
 app = Flask(__name__)
 
@@ -20,12 +16,17 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ 利用可能な日本語フォントを取得
-def get_japanese_font():
-    """Render（Linux環境）で利用できるフォントを選択"""
+# ✅ 利用可能なフォントを取得（.ttf のみ）
+def get_valid_japanese_font():
+    """利用可能なフォントを検索し、.ttf を優先して取得"""
     font_candidates = [
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # ✅ Linux環境の推奨フォント
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # ✅ バックアップ用（日本語対応なし）
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅ 推奨
+        "/Library/Fonts/Osaka.ttf",  # macOS
+        "/System/Library/Fonts/Supplemental/Hiragino Sans GB.ttf",  # macOS
+        "/System/Library/Fonts/Supplemental/HiraginoSans-W3.ttc",  # macOS ⚠ TTCは不完全
+        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows ✅ 推奨
+        "C:/Windows/Fonts/YuGothM.ttc",  # Windows ⚠ TTCは不完全
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux ✅ 推奨
     ]
 
     for font in font_candidates:
@@ -33,14 +34,10 @@ def get_japanese_font():
             print(f"✅ 利用可能なフォントが見つかりました: {font}")
             return font
 
-    print("⚠️ 適切なフォントが見つかりません。デフォルトの Helvetica を使用します。")
+    print("⚠️ 適切な日本語フォントが見つかりません。デフォルトフォントを使用します。")
     return None  # フォントなしでも実行できるようにする
 
-JAPANESE_FONT_PATH = get_japanese_font()
-
-# ✅ フォント登録
-if JAPANESE_FONT_PATH:
-    pdfmetrics.registerFont(TTFont("CustomFont", JAPANESE_FONT_PATH))
+japanese_font_path = get_valid_japanese_font()
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -76,38 +73,49 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（PyPDF2 + ReportLab 版）"""
-    reader = PdfReader(input_pdf)
-    writer = PdfWriter()
+    """✅ PDF の白い文字を赤に変換（UTF-8対応）"""
+    doc = fitz.open(input_pdf)
 
-    for i, page in enumerate(reader.pages):
-        text = page.extract_text()
-        if text:
-            # ✅ ReportLab を使って新しいPDFを作成
-            temp_pdf_path = f"{OUTPUT_FOLDER}/temp_page_{i}.pdf"
-            c = canvas.Canvas(temp_pdf_path, pagesize=letter)
+    for page in doc:
+        text_dict = page.get_text("dict")
+        for block in text_dict.get("blocks", []):
+            if block.get("type") != 0:
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    if span.get("color", 0) == 16777215 and span.get("text", "").strip():
+                        text = span["text"]
+                        size = span["size"]
+                        origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
+                        fontname = span.get("font", "helv")  # ✅ 元のフォントを取得
+                        
+                        # ✅ UTF-8 デバッグ
+                        print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
-            if JAPANESE_FONT_PATH:
-                c.setFont("CustomFont", 12)
-            else:
-                c.setFont("Helvetica", 12)  # フォントがない場合はデフォルトを使用
+                        try:
+                            # ✅ PyMuPDF が認識できないフォントは Helvetica に置き換え
+                            if fontname.startswith("HiraKakuProN"):  
+                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Helvetica に置き換えます。")
+                                fontname = "helv"  
 
-            # ✅ 赤い色でテキストを描画
-            c.setFillColorRGB(1, 0, 0)  # 赤
-            c.drawString(100, 750, text)  # 適当な位置にテキストを描画
-            c.save()
+                            # ✅ フォント適用処理
+                            if japanese_font_path:
+                                page.insert_text(origin, text,
+                                                 fontsize=size,
+                                                 color=(1, 0, 0),
+                                                 fontname=fontname,  # ✅ フォント名を指定
+                                                 fontfile=japanese_font_path,  # ✅ 明示的にフォント適用
+                                                 overlay=True)
+                            else:
+                                page.insert_text(origin, text,
+                                                 fontsize=size,
+                                                 color=(1, 0, 0),
+                                                 fontname=fontname,  # ✅ 既存フォントを使用
+                                                 overlay=True)
+                        except Exception as e:
+                            print(f"❌ フォント適用エラー: {e}")
 
-            # ✅ PyPDF2 でオリジナルのページと合成
-            temp_reader = PdfReader(temp_pdf_path)
-            page.merge_page(temp_reader.pages[0])
-
-        writer.add_page(page)
-
-    # ✅ 変換後のPDFを保存
-    with open(output_pdf, "wb") as output_file:
-        writer.write(output_file)
+    doc.save(output_pdf)
 
 if __name__ == "__main__":
-    from os import environ
-    port = int(environ.get("PORT", 10000))  # 環境変数 PORT を使用
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(debug=True)
