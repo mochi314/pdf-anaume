@@ -16,15 +16,16 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ Arial Unicode フォントのパスを取得（日本語対応）
+# ✅ Arial Unicode MS を優先してフォントを取得
 def get_unicode_font():
-    """利用可能な Arial Unicode フォントを検索"""
+    """システム内の日本語フォントを検索"""
     font_candidates = [
         "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅
         "/Library/Fonts/Arial Unicode.ttf",  # macOS
-        "C:/Windows/Fonts/Arial Unicode.ttf",  # Windows ✅
-        "C:/Windows/Fonts/YuGothM.ttc",  # Windows (游ゴシック) ⚠️
-        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux (IPA フォント) ✅
+        "C:/Windows/Fonts/arialuni.ttf",  # Windows ✅ Arial Unicode MS
+        "C:/Windows/Fonts/YuGothM.ttc",  # Windows (游ゴシック)
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux (IPA Gothic)
+        "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",  # Noto Sans CJK
     ]
 
     for font in font_candidates:
@@ -85,7 +86,7 @@ def process_pdf(input_pdf, output_pdf):
                         text = span["text"]
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
-                        fontname = span.get("font", "helv")  # ✅ 元のフォントを取得
+                        fontname = span.get("font", "Arial Unicode MS")  # ✅ Arial Unicode をデフォルトに変更
 
                         print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
