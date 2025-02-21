@@ -2,10 +2,10 @@
 import os
 from flask import Flask, request, send_file, render_template
 from werkzeug.utils import secure_filename
-from PyPDF2 import PdfReader, PdfWriter
+from PyPDF2 import PdfReader
 from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.colors import red
-from io import BytesIO
 
 app = Flask(__name__)
 
@@ -53,41 +53,27 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（PyPDF2 + ReportLab で処理）"""
+    """✅ PDF の白い文字を赤に変換（PyPDF2 + ReportLab）"""
     reader = PdfReader(input_pdf)
-    writer = PdfWriter()
+    output_canvas = canvas.Canvas(output_pdf, pagesize=letter)
     
-    for page_num in range(len(reader.pages)):
-        page = reader.pages[page_num]
+    # ✅ 日本語フォントを設定（ReportLab 標準の和文フォント）
+    font_name = "HeiseiKakuGo-W5"
+    output_canvas.setFont(font_name, 12)
+
+    for page_num, page in enumerate(reader.pages):
         text = page.extract_text()
 
-        # ✅ 新しい PDF ページを作成
-        packet = BytesIO()
-        c = canvas.Canvas(packet, pagesize=page.mediabox[2:])
-
-        # ✅ 赤い文字で書き直し
-        c.setFillColor(red)
-        c.setFont("Helvetica", 12)  # フォントは変更せず、デフォルトを維持
-
         if text:
-            y_position = page.mediabox[3] - 40  # ページの上部から配置
+            y_position = 750  # ページ上部から開始
             for line in text.split("\n"):
-                c.drawString(50, y_position, line)  # 50px のマージンを付ける
-                y_position -= 15  # 行間を調整
+                output_canvas.setFillColor(red)  # 文字色を赤に変更
+                output_canvas.drawString(50, float(y_position), line)  # 50px のマージン
+                y_position -= 14  # 行間を調整
 
-        c.save()
-        packet.seek(0)
+        output_canvas.showPage()  # ✅ 新しいページを追加
 
-        # ✅ ReportLab で作成したキャンバスをオーバーレイ
-        overlay_pdf = PdfReader(packet)
-        page.merge_page(overlay_pdf.pages[0])
-
-        # ✅ 書き込み用に追加
-        writer.add_page(page)
-
-    # ✅ 出力 PDF を保存
-    with open(output_pdf, "wb") as out_pdf:
-        writer.write(out_pdf)
+    output_canvas.save()  # PDF を保存
 
 if __name__ == "__main__":
     from os import environ
