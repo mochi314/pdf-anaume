@@ -16,9 +16,9 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ 日本語フォントを Render で手動適用
+# ✅ Render 環境で手動ダウンロードした日本語フォントを適用
 def get_valid_japanese_font():
-    """Render 環境で手動ダウンロードした日本語フォントを適用"""
+    """手動ダウンロードしたフォントを適用"""
     font_candidates = [
         "static/fonts/ipaexg.ttf",  # IPAex ゴシック
         "static/fonts/ipaexm.ttf",  # IPAex 明朝
@@ -72,6 +72,12 @@ def process_pdf(input_pdf, output_pdf):
     """✅ PDF の白い文字を赤に変換（UTF-8対応）"""
     doc = fitz.open(input_pdf)
 
+    # ✅ Render で確実にフォントを適用する
+    if japanese_font_path:
+        font_xref = doc.insert_font(file=japanese_font_path)  # フォントをPDFに埋め込む
+    else:
+        font_xref = None
+
     for page in doc:
         text_dict = page.get_text("dict")
         for block in text_dict.get("blocks", []):
@@ -83,18 +89,18 @@ def process_pdf(input_pdf, output_pdf):
                         text = span["text"]
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
-                        fontname = span.get("font", "helv")  # ✅ 元のフォントを取得
-                        
+
                         # ✅ UTF-8 デバッグ
-                        print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
+                        print(f"処理中: {text.encode('utf-8')} at {origin}")
 
                         try:
                             # ✅ フォント適用処理
-                            if japanese_font_path:
+                            if font_xref:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
                                                  fontfile=japanese_font_path,  # ✅ 日本語フォントを適用
+                                                 fontname="customfont",  # ✅ PDF内のカスタムフォントを使用
                                                  overlay=True)
                             else:
                                 print("⚠️ 日本語フォントが見つからないため、デフォルトフォントを使用します。")
