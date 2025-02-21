@@ -1,4 +1,22 @@
-# Pythonの仮想環境関連
+# Python関連
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 仮想環境関連
+venv/
+.env
+
+# OS関連
+.DS_Store
+
+# 出力ディレクトリ (フォルダは無視するが.gitkeepは追跡する)
+output/*
+!output/.gitkeep
+
+uploads/*
+!uploads/.gitkeep# Pythonの仮想環境関連
 venv/
 __pycache__/
 *.pyc
