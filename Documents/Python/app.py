@@ -16,8 +16,8 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ 確実に日本語を表示できるフォントを取得
-def get_japanese_font():
+# ✅ Arial Unicode MS を優先してフォントを取得
+def get_unicode_font():
     """システム内の日本語フォントを検索"""
     font_candidates = [
         "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅
@@ -25,18 +25,18 @@ def get_japanese_font():
         "C:/Windows/Fonts/arialuni.ttf",  # Windows ✅ Arial Unicode MS
         "C:/Windows/Fonts/YuGothM.ttc",  # Windows (游ゴシック)
         "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux (IPA Gothic)
-        "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",  # ✅ Noto Sans CJK
+        "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",  # Noto Sans CJK
     ]
 
     for font in font_candidates:
         if os.path.exists(font):
-            print(f"✅ 日本語フォントが見つかりました: {font}")
+            print(f"✅ 日本語対応フォントが見つかりました: {font}")
             return font
 
-    print("⚠️ 日本語フォントが見つかりません。デフォルトフォントを使用します。")
+    print("⚠️ 日本語対応フォントが見つかりません。デフォルトフォントを使用します。")
     return None  # フォントなしでも実行可能にする
 
-JAPANESE_FONT_PATH = get_japanese_font()
+UNICODE_FONT_PATH = get_unicode_font()
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -72,7 +72,7 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（確実に日本語が適用されるよう修正）"""
+    """✅ PDF の白い文字を赤に変換（Arial Unicode 適用）"""
     doc = fitz.open(input_pdf)
 
     for page in doc:
@@ -85,27 +85,31 @@ def process_pdf(input_pdf, output_pdf):
                     if span.get("color", 0) == 16777215 and span.get("text", "").strip():
                         text = span["text"]
                         size = span["size"]
-                        bbox = span["bbox"]  # ✅ bbox を取得
-                        origin = (bbox[0], bbox[1])  # ✅ 位置座標
-                        fontname = "Arial Unicode MS"  # ✅ Arial Unicode を強制適用
+                        origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
+                        fontname = span.get("font", "Arial Unicode MS")  # ✅ Arial Unicode をデフォルトに変更
 
                         print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
                         try:
-                            # ✅ 確実に Arial Unicode MS か Noto Sans CJK を使用
-                            if JAPANESE_FONT_PATH:
-                                page.insert_textbox(bbox, text,
-                                                    fontsize=size,
-                                                    color=(1, 0, 0),
-                                                    fontname="Arial Unicode MS",
-                                                    fontfile=JAPANESE_FONT_PATH,
-                                                    align=0)  # ✅ 確実に適用されるよう insert_textbox を使用
+                            # ✅ PyMuPDF がサポートしていないフォントは Arial Unicode に置き換え
+                            if fontname.startswith("HiraKakuProN"):  
+                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial Unicode に置き換えます。")
+                                fontname = "Arial Unicode MS"
+
+                            # ✅ フォント適用処理（Unicode フォント適用）
+                            if UNICODE_FONT_PATH:
+                                page.insert_text(origin, text,
+                                                 fontsize=size,
+                                                 color=(1, 0, 0),
+                                                 fontname="Arial Unicode MS",  # ✅ Arial Unicode MS を指定
+                                                 fontfile=UNICODE_FONT_PATH,  # ✅ フォントファイルを明示的に適用
+                                                 overlay=True)
                             else:
-                                page.insert_textbox(bbox, text,
-                                                    fontsize=size,
-                                                    color=(1, 0, 0),
-                                                    fontname="NotoSansCJK",  # ✅ 日本語が確実に入るフォント
-                                                    align=0)
+                                page.insert_text(origin, text,
+                                                 fontsize=size,
+                                                 color=(1, 0, 0),
+                                                 fontname="helv",  # ✅ 既存フォントを使用
+                                                 overlay=True)
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
 
