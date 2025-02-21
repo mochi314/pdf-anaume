@@ -72,13 +72,13 @@ def process_pdf(input_pdf, output_pdf):
     """✅ PDF の白い文字を赤に変換（UTF-8対応）"""
     doc = fitz.open(input_pdf)
 
-    # ✅ Render で確実にフォントを適用する
-    if japanese_font_path:
-        font_xref = doc.insert_font(file=japanese_font_path)  # フォントをPDFに埋め込む
-    else:
-        font_xref = None
-
     for page in doc:
+        # ✅ 各ページごとにフォントを登録
+        if japanese_font_path:
+            font_xref = page.insert_font(file=japanese_font_path)  # ✅ 修正
+        else:
+            font_xref = None
+
         text_dict = page.get_text("dict")
         for block in text_dict.get("blocks", []):
             if block.get("type") != 0:
