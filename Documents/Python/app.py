@@ -16,25 +16,26 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ Arial フォントのパスを自動検出
-def get_arial_font():
-    """利用可能な Arial フォントを検索し、最適なものを選択"""
+# ✅ Arial Unicode フォントのパスを取得（日本語対応）
+def get_unicode_font():
+    """利用可能な Arial Unicode フォントを検索"""
     font_candidates = [
-        "/System/Library/Fonts/Supplemental/Arial.ttf",  # macOS ✅
-        "C:/Windows/Fonts/Arial.ttf",  # Windows ✅
-        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",  # Linux (Ubuntu)
-        "/usr/share/fonts/truetype/msttcorefonts/arial.ttf",  # Linux (Debian)
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅
+        "/Library/Fonts/Arial Unicode.ttf",  # macOS
+        "C:/Windows/Fonts/Arial Unicode.ttf",  # Windows ✅
+        "C:/Windows/Fonts/YuGothM.ttc",  # Windows (游ゴシック) ⚠️
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux (IPA フォント) ✅
     ]
 
     for font in font_candidates:
         if os.path.exists(font):
-            print(f"✅ Arial フォントが見つかりました: {font}")
+            print(f"✅ 日本語対応フォントが見つかりました: {font}")
             return font
 
-    print("⚠️ Arial フォントが見つかりません。デフォルトフォントを使用します。")
-    return None  # フォントなしでも実行できるようにする
+    print("⚠️ 日本語対応フォントが見つかりません。デフォルトフォントを使用します。")
+    return None  # フォントなしでも実行可能にする
 
-ARIAL_FONT_PATH = get_arial_font()
+UNICODE_FONT_PATH = get_unicode_font()
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -70,7 +71,7 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（Arial 適用）"""
+    """✅ PDF の白い文字を赤に変換（Arial Unicode 適用）"""
     doc = fitz.open(input_pdf)
 
     for page in doc:
@@ -89,18 +90,18 @@ def process_pdf(input_pdf, output_pdf):
                         print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
                         try:
-                            # ✅ PyMuPDF がサポートしていないフォントは Arial に置き換え
+                            # ✅ PyMuPDF がサポートしていないフォントは Arial Unicode に置き換え
                             if fontname.startswith("HiraKakuProN"):  
-                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial に置き換えます。")
-                                fontname = "Arial"
+                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial Unicode に置き換えます。")
+                                fontname = "Arial Unicode MS"
 
-                            # ✅ フォント適用処理
-                            if ARIAL_FONT_PATH:
+                            # ✅ フォント適用処理（Unicode フォント適用）
+                            if UNICODE_FONT_PATH:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname="Arial",  # ✅ Arial を指定
-                                                 fontfile=ARIAL_FONT_PATH,  # ✅ Arial のフォントファイルを明示的に適用
+                                                 fontname="Arial Unicode MS",  # ✅ Arial Unicode MS を指定
+                                                 fontfile=UNICODE_FONT_PATH,  # ✅ フォントファイルを明示的に適用
                                                  overlay=True)
                             else:
                                 page.insert_text(origin, text,
