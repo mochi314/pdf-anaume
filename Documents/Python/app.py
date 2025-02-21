@@ -16,17 +16,16 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ 利用可能なフォントを取得（.ttf のみ）
+# ✅ Render 環境でも適用可能な日本語フォントを取得
 def get_valid_japanese_font():
-    """利用可能なフォントを検索し、.ttf を優先して取得"""
+    """利用可能な日本語フォントを検索し、.ttf を優先して取得"""
     font_candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅ 推奨
+        "/usr/share/fonts/opentype/ipaexfont-mincho/ipaexm.ttf",  # Render/Linux
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS
         "/Library/Fonts/Osaka.ttf",  # macOS
         "/System/Library/Fonts/Supplemental/Hiragino Sans GB.ttf",  # macOS
-        "/System/Library/Fonts/Supplemental/HiraginoSans-W3.ttc",  # macOS ⚠ TTCは不完全
-        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows ✅ 推奨
-        "C:/Windows/Fonts/YuGothM.ttc",  # Windows ⚠ TTCは不完全
-        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux ✅ 推奨
+        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows
     ]
 
     for font in font_candidates:
@@ -34,7 +33,7 @@ def get_valid_japanese_font():
             print(f"✅ 利用可能なフォントが見つかりました: {font}")
             return font
 
-    print("⚠️ 適切な日本語フォントが見つかりません。デフォルトフォントを使用します。")
+    print("⚠️ 適切な日本語フォントが見つかりません。")
     return None  # フォントなしでも実行できるようにする
 
 japanese_font_path = get_valid_japanese_font()
@@ -93,24 +92,19 @@ def process_pdf(input_pdf, output_pdf):
                         print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
                         try:
-                            # ✅ PyMuPDF が認識できないフォントは Helvetica に置き換え
-                            if fontname.startswith("HiraKakuProN"):  
-                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Helvetica に置き換えます。")
-                                fontname = "helv"  
-
                             # ✅ フォント適用処理
                             if japanese_font_path:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname=fontname,  # ✅ フォント名を指定
-                                                 fontfile=japanese_font_path,  # ✅ 明示的にフォント適用
+                                                 fontfile=japanese_font_path,  # ✅ 日本語フォントを適用
                                                  overlay=True)
                             else:
+                                print("⚠️ 日本語フォントが見つからないため、デフォルトフォントを使用します。")
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname=fontname,  # ✅ 既存フォントを使用
+                                                 fontname="helv",  # ✅ 既存フォントを使用
                                                  overlay=True)
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
