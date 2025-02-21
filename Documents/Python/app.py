@@ -75,7 +75,7 @@ def upload_file():
     abort(400, "許可されていないファイル形式です")
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（UTF-8対応 & エラーハンドリング強化）"""
+    """✅ PDF の白い文字を赤に変換（フォント埋め込み修正済み）"""
     try:
         doc = fitz.open(input_pdf)
     except Exception as e:
@@ -95,16 +95,16 @@ def process_pdf(input_pdf, output_pdf):
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
 
-                        # ✅ UTF-8 デバッグ
                         print(f"🔹 処理中: {text.encode('utf-8')} at {origin}")
 
                         try:
-                            # ✅ 日本語フォントを確実に適用
+                            # ✅ フォントを確実に埋め込む
                             if japanese_font_path:
+                                font_xref = page.insert_font(fontfile=japanese_font_path, fontname="customfont")
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontfile=japanese_font_path,  # ✅ 確実に日本語フォントを適用
+                                                 fontname="customfont",  # ✅ フォント名を明示
                                                  overlay=True)
                                 print(f"✅ {text} を赤字で描画しました at {origin}")
                             else:
@@ -112,7 +112,7 @@ def process_pdf(input_pdf, output_pdf):
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname="helv",  # ✅ 既存フォントを使用
+                                                 fontname="helv",
                                                  overlay=True)
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
