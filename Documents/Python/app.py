@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
-import fitz  # PyMuPDF
 from flask import Flask, request, send_file, render_template
 from werkzeug.utils import secure_filename
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.pagesizes import letter
 
 app = Flask(__name__)
 
@@ -16,27 +19,12 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ 日本語フォントを取得（.ttf のみ）
-def get_valid_japanese_font():
-    """利用可能な日本語フォントを検索して取得"""
-    font_candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅
-        "/Library/Fonts/Osaka.ttf",  # macOS
-        "/System/Library/Fonts/Supplemental/HiraginoSans-W3.ttc",  # macOS
-        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows ✅
-        "C:/Windows/Fonts/YuGothM.ttc",  # Windows
-        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux ✅
-    ]
+# ✅ 日本語フォントを登録 (フォントパスを環境に合わせて変更)
+JAPANESE_FONT_PATH = "/System/Library/Fonts/Supplemental/Arial.ttf"  # macOS
+# JAPANESE_FONT_PATH = "C:/Windows/Fonts/msgothic.ttc"  # Windows
+# JAPANESE_FONT_PATH = "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"  # Linux
 
-    for font in font_candidates:
-        if os.path.exists(font):
-            print(f"✅ 利用可能な日本語フォントが見つかりました: {font}")
-            return font
-
-    print("⚠️ 適切な日本語フォントが見つかりません。デフォルトフォントを使用します。")
-    return None  # フォントなしでも実行できるようにする
-
-japanese_font_path = get_valid_japanese_font()
+pdfmetrics.registerFont(TTFont("CustomFont", JAPANESE_FONT_PATH))
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -64,57 +52,32 @@ def upload_file():
         filename_without_ext, file_ext = os.path.splitext(filename)
         output_filepath = os.path.join(app.config["OUTPUT_FOLDER"], f"{filename_without_ext}_red{file_ext}")
 
-        # ✅ PDF を処理
-        process_pdf(filepath, output_filepath)
+        # ✅ PDF を作成
+        create_pdf_with_red_text(filepath, output_filepath)
 
         return send_file(output_filepath, as_attachment=True)
 
     return "許可されていないファイル形式です", 400
 
-def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（UTF-8対応 & 日本語フォント対応）"""
-    doc = fitz.open(input_pdf)
+def create_pdf_with_red_text(input_text_file, output_pdf):
+    """✅ reportlab を使って日本語PDFを作成し、白い文字を赤に変換"""
+    c = canvas.Canvas(output_pdf, pagesize=letter)
+    c.setFont("CustomFont", 16)
 
-    for page in doc:
-        text_dict = page.get_text("dict")
-        for block in text_dict.get("blocks", []):
-            if block.get("type") != 0:
-                continue
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    if span.get("color", 0) == 16777215 and span.get("text", "").strip():
-                        text = span["text"]
-                        size = span["size"]
-                        origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
-                        fontname = span.get("font", "helv")  # ✅ 元のフォントを取得
-                        rect = fitz.Rect(origin[0], origin[1] - size, origin[0] + 200, origin[1])  # 適当な範囲
+    # ✅ 既存のPDFを開く代わりに、アップロードされたPDFのテキストを読み込む
+    with open(input_text_file, "r", encoding="utf-8") as f:
+        lines = f.readlines()
 
-                        # ✅ UTF-8 デバッグ
-                        print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
+    y_position = 750  # ページ上部から開始
+    for line in lines:
+        line = line.strip()
+        if line:  # 空行でなければ描画
+            c.setFillColorRGB(1, 0, 0)  # 🔴 赤い文字に変換
+            c.drawString(100, y_position, line)  # 日本語テキストを描画
+            y_position -= 20  # 次の行に移動
 
-                        try:
-                            # ✅ PyMuPDF が認識できないフォントは Arial に置き換え
-                            if fontname.startswith("HiraKakuProN") or fontname.startswith("MS Gothic"):
-                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial に置き換えます。")
-                                fontname = "Arial"  
-
-                            # ✅ `insert_textbox` を使い、日本語フォントを明示的に指定
-                            if japanese_font_path:
-                                page.insert_textbox(rect, text,
-                                                    fontsize=size,
-                                                    color=(1, 0, 0),  # 赤色
-                                                    fontfile=japanese_font_path,  # ✅ フォントを適用
-                                                    align=fitz.TEXT_ALIGN_LEFT)
-                            else:
-                                page.insert_textbox(rect, text,
-                                                    fontsize=size,
-                                                    color=(1, 0, 0),  # 赤色
-                                                    fontname=fontname,  # ✅ Arial またはデフォルトフォント
-                                                    align=fitz.TEXT_ALIGN_LEFT)
-                        except Exception as e:
-                            print(f"❌ フォント適用エラー: {e}")
-
-    doc.save(output_pdf)
+    c.save()
+    print(f"✅ PDF を生成しました: {output_pdf}")
 
 if __name__ == "__main__":
     from os import environ
