@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
-import fitz  # PyMuPDF
 from flask import Flask, request, send_file, render_template
 from werkzeug.utils import secure_filename
+from PyPDF2 import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.colors import red
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -15,26 +18,6 @@ os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
-
-# ✅ Japan-S フォントを優先的に取得
-def get_japan_s_font():
-    """Japan-S フォントのパスを取得"""
-    font_candidates = [
-        "/Library/Fonts/Japan-S.ttf",  # macOS ✅
-        "/System/Library/Fonts/Supplemental/Japan-S.ttf",  # macOS
-        "C:/Windows/Fonts/Japan-S.ttf",  # Windows ✅
-        "/usr/share/fonts/opentype/japan-s/Japan-S.ttf",  # Linux
-    ]
-
-    for font in font_candidates:
-        if os.path.exists(font):
-            print(f"✅ Japan-S フォントが見つかりました: {font}")
-            return font
-
-    print("⚠️ Japan-S フォントが見つかりません。デフォルトフォントを使用します。")
-    return None  # フォントなしでも実行可能にする
-
-JAPAN_S_FONT_PATH = get_japan_s_font()
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -70,48 +53,41 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（Japan-S フォント適用）"""
-    doc = fitz.open(input_pdf)
+    """✅ PDF の白い文字を赤に変換（PyPDF2 + ReportLab で処理）"""
+    reader = PdfReader(input_pdf)
+    writer = PdfWriter()
+    
+    for page_num in range(len(reader.pages)):
+        page = reader.pages[page_num]
+        text = page.extract_text()
 
-    for page in doc:
-        text_dict = page.get_text("dict")
-        for block in text_dict.get("blocks", []):
-            if block.get("type") != 0:
-                continue
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    if span.get("color", 0) == 16777215 and span.get("text", "").strip():
-                        text = span["text"]
-                        size = span["size"]
-                        origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
-                        fontname = span.get("font", "Japan-S")  # ✅ Japan-S をデフォルトに変更
+        # ✅ 新しい PDF ページを作成
+        packet = BytesIO()
+        c = canvas.Canvas(packet, pagesize=page.mediabox[2:])
 
-                        print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
+        # ✅ 赤い文字で書き直し
+        c.setFillColor(red)
+        c.setFont("Helvetica", 12)  # フォントは変更せず、デフォルトを維持
 
-                        try:
-                            # ✅ PyMuPDF がサポートしていないフォントは Japan-S に置き換え
-                            if fontname.startswith("HiraKakuProN"):  
-                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Japan-S に置き換えます。")
-                                fontname = "Japan-S"
+        if text:
+            y_position = page.mediabox[3] - 40  # ページの上部から配置
+            for line in text.split("\n"):
+                c.drawString(50, y_position, line)  # 50px のマージンを付ける
+                y_position -= 15  # 行間を調整
 
-                            # ✅ フォント適用処理（Japan-S フォント適用）
-                            if JAPAN_S_FONT_PATH:
-                                page.insert_text(origin, text,
-                                                 fontsize=size,
-                                                 color=(1, 0, 0),
-                                                 fontname="Japan-S",  # ✅ Japan-S を指定
-                                                 fontfile=JAPAN_S_FONT_PATH,  # ✅ フォントファイルを明示的に適用
-                                                 overlay=True)
-                            else:
-                                page.insert_text(origin, text,
-                                                 fontsize=size,
-                                                 color=(1, 0, 0),
-                                                 fontname="helv",  # ✅ 既存フォントを使用
-                                                 overlay=True)
-                        except Exception as e:
-                            print(f"❌ フォント適用エラー: {e}")
+        c.save()
+        packet.seek(0)
 
-    doc.save(output_pdf)
+        # ✅ ReportLab で作成したキャンバスをオーバーレイ
+        overlay_pdf = PdfReader(packet)
+        page.merge_page(overlay_pdf.pages[0])
+
+        # ✅ 書き込み用に追加
+        writer.add_page(page)
+
+    # ✅ 出力 PDF を保存
+    with open(output_pdf, "wb") as out_pdf:
+        writer.write(out_pdf)
 
 if __name__ == "__main__":
     from os import environ
