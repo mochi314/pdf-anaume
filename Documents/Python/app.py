@@ -16,25 +16,22 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ Render 環境でも適用可能な日本語フォントを取得
+# ✅ 日本語フォントを Render で手動適用
 def get_valid_japanese_font():
-    """利用可能な日本語フォントを検索し、.ttf を優先して取得"""
+    """Render 環境で手動ダウンロードした日本語フォントを適用"""
     font_candidates = [
-        "/usr/share/fonts/opentype/ipaexfont-mincho/ipaexm.ttf",  # Render/Linux
-        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS
-        "/Library/Fonts/Osaka.ttf",  # macOS
-        "/System/Library/Fonts/Supplemental/Hiragino Sans GB.ttf",  # macOS
-        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows
+        "static/fonts/ipaexg.ttf",  # IPAex ゴシック
+        "static/fonts/ipaexm.ttf",  # IPAex 明朝
+        "static/fonts/NotoSansJP-Regular.ttf",  # Noto Sans JP
     ]
 
     for font in font_candidates:
         if os.path.exists(font):
-            print(f"✅ 利用可能なフォントが見つかりました: {font}")
+            print(f"✅ 日本語フォントを適用: {font}")
             return font
 
-    print("⚠️ 適切な日本語フォントが見つかりません。")
-    return None  # フォントなしでも実行できるようにする
+    print("⚠️ 指定の日本語フォントが見つかりません。デフォルトフォントを使用します。")
+    return None
 
 japanese_font_path = get_valid_japanese_font()
 
