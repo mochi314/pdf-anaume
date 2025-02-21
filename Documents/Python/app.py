@@ -16,27 +16,25 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ Arial Unicode MS を優先してフォントを取得
-def get_unicode_font():
-    """システム内の日本語フォントを検索"""
+# ✅ Japan-S フォントを優先的に取得
+def get_japan_s_font():
+    """Japan-S フォントのパスを取得"""
     font_candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅
-        "/Library/Fonts/Arial Unicode.ttf",  # macOS
-        "C:/Windows/Fonts/arialuni.ttf",  # Windows ✅ Arial Unicode MS
-        "C:/Windows/Fonts/YuGothM.ttc",  # Windows (游ゴシック)
-        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux (IPA Gothic)
-        "/usr/share/fonts/noto/NotoSansCJK-Regular.ttc",  # Noto Sans CJK
+        "/Library/Fonts/Japan-S.ttf",  # macOS ✅
+        "/System/Library/Fonts/Supplemental/Japan-S.ttf",  # macOS
+        "C:/Windows/Fonts/Japan-S.ttf",  # Windows ✅
+        "/usr/share/fonts/opentype/japan-s/Japan-S.ttf",  # Linux
     ]
 
     for font in font_candidates:
         if os.path.exists(font):
-            print(f"✅ 日本語対応フォントが見つかりました: {font}")
+            print(f"✅ Japan-S フォントが見つかりました: {font}")
             return font
 
-    print("⚠️ 日本語対応フォントが見つかりません。デフォルトフォントを使用します。")
+    print("⚠️ Japan-S フォントが見つかりません。デフォルトフォントを使用します。")
     return None  # フォントなしでも実行可能にする
 
-UNICODE_FONT_PATH = get_unicode_font()
+JAPAN_S_FONT_PATH = get_japan_s_font()
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -72,7 +70,7 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（Arial Unicode 適用）"""
+    """✅ PDF の白い文字を赤に変換（Japan-S フォント適用）"""
     doc = fitz.open(input_pdf)
 
     for page in doc:
@@ -86,23 +84,23 @@ def process_pdf(input_pdf, output_pdf):
                         text = span["text"]
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
-                        fontname = span.get("font", "Arial Unicode MS")  # ✅ Arial Unicode をデフォルトに変更
+                        fontname = span.get("font", "Japan-S")  # ✅ Japan-S をデフォルトに変更
 
                         print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
                         try:
-                            # ✅ PyMuPDF がサポートしていないフォントは Arial Unicode に置き換え
+                            # ✅ PyMuPDF がサポートしていないフォントは Japan-S に置き換え
                             if fontname.startswith("HiraKakuProN"):  
-                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial Unicode に置き換えます。")
-                                fontname = "Arial Unicode MS"
+                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Japan-S に置き換えます。")
+                                fontname = "Japan-S"
 
-                            # ✅ フォント適用処理（Unicode フォント適用）
-                            if UNICODE_FONT_PATH:
+                            # ✅ フォント適用処理（Japan-S フォント適用）
+                            if JAPAN_S_FONT_PATH:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname="Arial Unicode MS",  # ✅ Arial Unicode MS を指定
-                                                 fontfile=UNICODE_FONT_PATH,  # ✅ フォントファイルを明示的に適用
+                                                 fontname="Japan-S",  # ✅ Japan-S を指定
+                                                 fontfile=JAPAN_S_FONT_PATH,  # ✅ フォントファイルを明示的に適用
                                                  overlay=True)
                             else:
                                 page.insert_text(origin, text,
