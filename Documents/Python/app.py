@@ -22,15 +22,15 @@ def get_valid_japanese_font():
     font_candidates = [
         "static/fonts/ipaexg.ttf",  # IPAex ゴシック
         "static/fonts/ipaexm.ttf",  # IPAex 明朝
-        "static/fonts/NotoSansJP-Regular.ttf",  # Noto Sans JP
+        "static/fonts/NotoSansJP-Regular.otf",  # Noto Sans JP（OTF対応）
     ]
 
     for font in font_candidates:
-        if os.path.exists(font):
+        if os.path.exists(font) and os.path.getsize(font) > 0:
             print(f"✅ 日本語フォントを適用: {font}")
             return font
 
-    print("⚠️ 指定の日本語フォントが見つかりません。デフォルトフォントを使用します。")
+    print("⚠️ 指定の日本語フォントが見つからないか、壊れています。デフォルトフォントを使用します。")
     return None
 
 japanese_font_path = get_valid_japanese_font()
@@ -75,7 +75,7 @@ def upload_file():
     abort(400, "許可されていないファイル形式です")
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（UTF-8対応 & エラーハンドリング強化）"""
+    """✅ PDF の白い文字を赤に変換（フォント埋め込み修正済み）"""
     try:
         doc = fitz.open(input_pdf)
     except Exception as e:
@@ -95,24 +95,24 @@ def process_pdf(input_pdf, output_pdf):
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
 
-                        # ✅ UTF-8 デバッグ
                         print(f"🔹 処理中: {text.encode('utf-8')} at {origin}")
 
                         try:
-                            # ✅ 日本語フォントを確実に適用
-                            if japanese_font_path:
+                            # ✅ フォントを確実に埋め込む
+                            if japanese_font_path and os.path.exists(japanese_font_path):
+                                font_xref = page.insert_font(fontfile=japanese_font_path)
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontfile=japanese_font_path,  # ✅ 確実に日本語フォントを適用
+                                                 fontname="customfont",  # ✅ フォント名を明示
                                                  overlay=True)
                                 print(f"✅ {text} を赤字で描画しました at {origin}")
                             else:
-                                print("⚠️ 日本語フォントが見つからないため、デフォルトフォントを使用します。")
+                                print(f"⚠️ 日本語フォントが見つからないか、壊れているためデフォルトフォントを使用します: {japanese_font_path}")
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname="helv",  # ✅ 既存フォントを使用
+                                                 fontname="helv",
                                                  overlay=True)
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
