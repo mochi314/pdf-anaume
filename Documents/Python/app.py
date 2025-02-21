@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import fitz  # PyMuPDF
-from flask import Flask, request, send_file, render_template, abort
+from flask import Flask, request, send_file, render_template
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -16,22 +16,26 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ Render 環境で手動ダウンロードした日本語フォントを適用
+# ✅ 利用可能なフォントを取得（.ttf のみ）
 def get_valid_japanese_font():
-    """手動ダウンロードしたフォントを適用（Render 用）"""
+    """利用可能なフォントを検索し、.ttf を優先して取得"""
     font_candidates = [
-        "static/fonts/ipaexg.ttf",  # IPAex ゴシック
-        "static/fonts/ipaexm.ttf",  # IPAex 明朝
-        "static/fonts/NotoSansJP-Regular.otf",  # Noto Sans JP（OTF対応）
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅ 推奨
+        "/Library/Fonts/Osaka.ttf",  # macOS
+        "/System/Library/Fonts/Supplemental/Hiragino Sans GB.ttf",  # macOS
+        "/System/Library/Fonts/Supplemental/HiraginoSans-W3.ttc",  # macOS ⚠ TTCは不完全
+        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows ✅ 推奨
+        "C:/Windows/Fonts/YuGothM.ttc",  # Windows ⚠ TTCは不完全
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux ✅ 推奨
     ]
 
     for font in font_candidates:
-        if os.path.exists(font) and os.path.getsize(font) > 0:
-            print(f"✅ 日本語フォントを適用: {font}")
+        if os.path.exists(font):
+            print(f"✅ 利用可能なフォントが見つかりました: {font}")
             return font
 
-    print("⚠️ 指定の日本語フォントが見つからないか、壊れています。デフォルトフォントを使用します。")
-    return None
+    print("⚠️ 適切な日本語フォントが見つかりません。デフォルトフォントを使用します。")
+    return None  # フォントなしでも実行できるようにする
 
 japanese_font_path = get_valid_japanese_font()
 
@@ -46,13 +50,11 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload_file():
     if "file" not in request.files:
-        print("⚠️ ファイルが選択されていません")
-        abort(400, "ファイルが選択されていません")
+        return "ファイルが選択されていません", 400
     
     file = request.files["file"]
     if file.filename == "":
-        print("⚠️ 空のファイルが選択されました")
-        abort(400, "ファイルが選択されていません")
+        return "ファイルが選択されていません", 400
 
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
@@ -63,28 +65,19 @@ def upload_file():
         filename_without_ext, file_ext = os.path.splitext(filename)
         output_filepath = os.path.join(app.config["OUTPUT_FOLDER"], f"{filename_without_ext}_red{file_ext}")
 
-        try:
-            # ✅ PDF を処理
-            process_pdf(filepath, output_filepath)
-            return send_file(output_filepath, as_attachment=True)
-        except Exception as e:
-            print(f"❌ PDF 処理中にエラー発生: {e}")
-            abort(500, "PDF 処理中にエラーが発生しました")
+        # ✅ PDF を処理
+        process_pdf(filepath, output_filepath)
 
-    print("⚠️ 許可されていないファイル形式です")
-    abort(400, "許可されていないファイル形式です")
+        return send_file(output_filepath, as_attachment=True)
+
+    return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（フォント埋め込み修正済み）"""
-    try:
-        doc = fitz.open(input_pdf)
-    except Exception as e:
-        print(f"❌ PDF を開く際にエラー: {e}")
-        abort(500, "PDF を開く際にエラーが発生しました")
+    """✅ PDF の白い文字を赤に変換（UTF-8対応）"""
+    doc = fitz.open(input_pdf)
 
     for page in doc:
         text_dict = page.get_text("dict")
-
         for block in text_dict.get("blocks", []):
             if block.get("type") != 0:
                 continue
@@ -94,35 +87,35 @@ def process_pdf(input_pdf, output_pdf):
                         text = span["text"]
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
-
-                        print(f"🔹 処理中: {text.encode('utf-8')} at {origin}")
+                        fontname = span.get("font", "helv")  # ✅ 元のフォントを取得
+                        
+                        # ✅ UTF-8 デバッグ
+                        print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
                         try:
-                            # ✅ フォントを確実に埋め込む
-                            if japanese_font_path and os.path.exists(japanese_font_path):
-                                font_xref = page.insert_font(fontfile=japanese_font_path)
+                            # ✅ PyMuPDF が認識できないフォントは Helvetica に置き換え
+                            if fontname.startswith("HiraKakuProN"):  
+                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Helvetica に置き換えます。")
+                                fontname = "helv"  
+
+                            # ✅ フォント適用処理
+                            if japanese_font_path:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname="customfont",  # ✅ フォント名を明示
+                                                 fontname=fontname,  # ✅ フォント名を指定
+                                                 fontfile=japanese_font_path,  # ✅ 明示的にフォント適用
                                                  overlay=True)
-                                print(f"✅ {text} を赤字で描画しました at {origin}")
                             else:
-                                print(f"⚠️ 日本語フォントが見つからないか、壊れているためデフォルトフォントを使用します: {japanese_font_path}")
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname="helv",
+                                                 fontname=fontname,  # ✅ 既存フォントを使用
                                                  overlay=True)
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
 
-    try:
-        doc.save(output_pdf)
-        print(f"✅ 変換完了！保存先: {output_pdf}")
-    except Exception as e:
-        print(f"❌ PDF 保存中にエラー: {e}")
-        abort(500, "PDF 保存中にエラーが発生しました")
+    doc.save(output_pdf)
 
 if __name__ == "__main__":
     app.run(debug=True)
