@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 import fitz  # PyMuPDF
 from flask import Flask, request, send_file, render_template
-from werkzeug.utils import secure_filename
+
+# ✅ 環境変数を UTF-8 に設定
+os.environ["PYTHONIOENCODING"] = "utf-8"
+sys.stdout.reconfigure(encoding="utf-8")
 
 app = Flask(__name__)
 
