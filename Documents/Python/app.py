@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 import fitz  # PyMuPDF
-from flask import Flask, request, send_file, render_template
+from flask import Flask, request, send_file, render_template, abort
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -18,7 +18,7 @@ app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
 # ✅ Render 環境で手動ダウンロードした日本語フォントを適用
 def get_valid_japanese_font():
-    """手動ダウンロードしたフォントを適用"""
+    """手動ダウンロードしたフォントを適用（Render 用）"""
     font_candidates = [
         "static/fonts/ipaexg.ttf",  # IPAex ゴシック
         "static/fonts/ipaexm.ttf",  # IPAex 明朝
@@ -46,11 +46,13 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload_file():
     if "file" not in request.files:
-        return "ファイルが選択されていません", 400
+        print("⚠️ ファイルが選択されていません")
+        abort(400, "ファイルが選択されていません")
     
     file = request.files["file"]
     if file.filename == "":
-        return "ファイルが選択されていません", 400
+        print("⚠️ 空のファイルが選択されました")
+        abort(400, "ファイルが選択されていません")
 
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
@@ -61,25 +63,28 @@ def upload_file():
         filename_without_ext, file_ext = os.path.splitext(filename)
         output_filepath = os.path.join(app.config["OUTPUT_FOLDER"], f"{filename_without_ext}_red{file_ext}")
 
-        # ✅ PDF を処理
-        process_pdf(filepath, output_filepath)
+        try:
+            # ✅ PDF を処理
+            process_pdf(filepath, output_filepath)
+            return send_file(output_filepath, as_attachment=True)
+        except Exception as e:
+            print(f"❌ PDF 処理中にエラー発生: {e}")
+            abort(500, "PDF 処理中にエラーが発生しました")
 
-        return send_file(output_filepath, as_attachment=True)
-
-    return "許可されていないファイル形式です", 400
+    print("⚠️ 許可されていないファイル形式です")
+    abort(400, "許可されていないファイル形式です")
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（UTF-8対応）"""
-    doc = fitz.open(input_pdf)
+    """✅ PDF の白い文字を赤に変換（UTF-8対応 & エラーハンドリング強化）"""
+    try:
+        doc = fitz.open(input_pdf)
+    except Exception as e:
+        print(f"❌ PDF を開く際にエラー: {e}")
+        abort(500, "PDF を開く際にエラーが発生しました")
 
     for page in doc:
-        # ✅ 各ページごとにフォントを登録
-        if japanese_font_path:
-            font_xref = page.insert_font(file=japanese_font_path)  # ✅ 修正
-        else:
-            font_xref = None
-
         text_dict = page.get_text("dict")
+
         for block in text_dict.get("blocks", []):
             if block.get("type") != 0:
                 continue
@@ -91,17 +96,17 @@ def process_pdf(input_pdf, output_pdf):
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
 
                         # ✅ UTF-8 デバッグ
-                        print(f"処理中: {text.encode('utf-8')} at {origin}")
+                        print(f"🔹 処理中: {text.encode('utf-8')} at {origin}")
 
                         try:
-                            # ✅ フォント適用処理
-                            if font_xref:
+                            # ✅ 日本語フォントを確実に適用
+                            if japanese_font_path:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontfile=japanese_font_path,  # ✅ 日本語フォントを適用
-                                                 fontname="customfont",  # ✅ PDF内のカスタムフォントを使用
+                                                 fontfile=japanese_font_path,  # ✅ 確実に日本語フォントを適用
                                                  overlay=True)
+                                print(f"✅ {text} を赤字で描画しました at {origin}")
                             else:
                                 print("⚠️ 日本語フォントが見つからないため、デフォルトフォントを使用します。")
                                 page.insert_text(origin, text,
@@ -112,7 +117,12 @@ def process_pdf(input_pdf, output_pdf):
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
 
-    doc.save(output_pdf)
+    try:
+        doc.save(output_pdf)
+        print(f"✅ 変換完了！保存先: {output_pdf}")
+    except Exception as e:
+        print(f"❌ PDF 保存中にエラー: {e}")
+        abort(500, "PDF 保存中にエラーが発生しました")
 
 if __name__ == "__main__":
     app.run(debug=True)
