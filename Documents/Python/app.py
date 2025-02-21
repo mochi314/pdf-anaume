@@ -2,9 +2,10 @@
 import os
 from flask import Flask, request, send_file, render_template
 from werkzeug.utils import secure_filename
+from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 from reportlab.lib.pagesizes import letter
 
 app = Flask(__name__)
@@ -19,12 +20,27 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ 日本語フォントを登録 (フォントパスを環境に合わせて変更)
-JAPANESE_FONT_PATH = "/System/Library/Fonts/Supplemental/Arial.ttf"  # macOS
-# JAPANESE_FONT_PATH = "C:/Windows/Fonts/msgothic.ttc"  # Windows
-# JAPANESE_FONT_PATH = "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf"  # Linux
+# ✅ 利用可能な日本語フォントを取得
+def get_japanese_font():
+    """Render（Linux環境）で利用できるフォントを選択"""
+    font_candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",  # ✅ Linux環境の推奨フォント
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # ✅ バックアップ用（日本語対応なし）
+    ]
 
-pdfmetrics.registerFont(TTFont("CustomFont", JAPANESE_FONT_PATH))
+    for font in font_candidates:
+        if os.path.exists(font):
+            print(f"✅ 利用可能なフォントが見つかりました: {font}")
+            return font
+
+    print("⚠️ 適切なフォントが見つかりません。デフォルトの Helvetica を使用します。")
+    return None  # フォントなしでも実行できるようにする
+
+JAPANESE_FONT_PATH = get_japanese_font()
+
+# ✅ フォント登録
+if JAPANESE_FONT_PATH:
+    pdfmetrics.registerFont(TTFont("CustomFont", JAPANESE_FONT_PATH))
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -52,32 +68,44 @@ def upload_file():
         filename_without_ext, file_ext = os.path.splitext(filename)
         output_filepath = os.path.join(app.config["OUTPUT_FOLDER"], f"{filename_without_ext}_red{file_ext}")
 
-        # ✅ PDF を作成
-        create_pdf_with_red_text(filepath, output_filepath)
+        # ✅ PDF を処理
+        process_pdf(filepath, output_filepath)
 
         return send_file(output_filepath, as_attachment=True)
 
     return "許可されていないファイル形式です", 400
 
-def create_pdf_with_red_text(input_text_file, output_pdf):
-    """✅ reportlab を使って日本語PDFを作成し、白い文字を赤に変換"""
-    c = canvas.Canvas(output_pdf, pagesize=letter)
-    c.setFont("CustomFont", 16)
+def process_pdf(input_pdf, output_pdf):
+    """✅ PDF の白い文字を赤に変換（PyPDF2 + ReportLab 版）"""
+    reader = PdfReader(input_pdf)
+    writer = PdfWriter()
 
-    # ✅ 既存のPDFを開く代わりに、アップロードされたPDFのテキストを読み込む
-    with open(input_text_file, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text()
+        if text:
+            # ✅ ReportLab を使って新しいPDFを作成
+            temp_pdf_path = f"{OUTPUT_FOLDER}/temp_page_{i}.pdf"
+            c = canvas.Canvas(temp_pdf_path, pagesize=letter)
 
-    y_position = 750  # ページ上部から開始
-    for line in lines:
-        line = line.strip()
-        if line:  # 空行でなければ描画
-            c.setFillColorRGB(1, 0, 0)  # 🔴 赤い文字に変換
-            c.drawString(100, y_position, line)  # 日本語テキストを描画
-            y_position -= 20  # 次の行に移動
+            if JAPANESE_FONT_PATH:
+                c.setFont("CustomFont", 12)
+            else:
+                c.setFont("Helvetica", 12)  # フォントがない場合はデフォルトを使用
 
-    c.save()
-    print(f"✅ PDF を生成しました: {output_pdf}")
+            # ✅ 赤い色でテキストを描画
+            c.setFillColorRGB(1, 0, 0)  # 赤
+            c.drawString(100, 750, text)  # 適当な位置にテキストを描画
+            c.save()
+
+            # ✅ PyPDF2 でオリジナルのページと合成
+            temp_reader = PdfReader(temp_pdf_path)
+            page.merge_page(temp_reader.pages[0])
+
+        writer.add_page(page)
+
+    # ✅ 変換後のPDFを保存
+    with open(output_pdf, "wb") as output_file:
+        writer.write(output_file)
 
 if __name__ == "__main__":
     from os import environ
