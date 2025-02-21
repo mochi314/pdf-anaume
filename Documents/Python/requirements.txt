@@ -1,5 +1,4 @@
 Flask
 gunicorn
 reportlab
-Werkzeugfontconfig
 fontconfig
