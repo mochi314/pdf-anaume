@@ -1,0 +1,17 @@
+# Pythonの仮想環境関連
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE関連
+.vscode/
+.idea/
+*.log
+
+# アップロード/出力フォルダ
+uploads/
+output/
+
+# 環境変数ファイル（もしあれば）
+.env
