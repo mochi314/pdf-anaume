@@ -16,26 +16,27 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ Arial Unicode フォントのパスを取得（日本語対応）
-def get_unicode_font():
-    """利用可能な Arial Unicode フォントを検索"""
+# ✅ 日本語フォントを取得（.ttf のみ）
+def get_valid_japanese_font():
+    """利用可能な日本語フォントを検索して取得"""
     font_candidates = [
         "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅
-        "/Library/Fonts/Arial Unicode.ttf",  # macOS
-        "C:/Windows/Fonts/Arial Unicode.ttf",  # Windows ✅
-        "C:/Windows/Fonts/YuGothM.ttc",  # Windows (游ゴシック) ⚠️
-        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux (IPA フォント) ✅
+        "/Library/Fonts/Osaka.ttf",  # macOS
+        "/System/Library/Fonts/Supplemental/HiraginoSans-W3.ttc",  # macOS
+        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows ✅
+        "C:/Windows/Fonts/YuGothM.ttc",  # Windows
+        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux ✅
     ]
 
     for font in font_candidates:
         if os.path.exists(font):
-            print(f"✅ 日本語対応フォントが見つかりました: {font}")
+            print(f"✅ 利用可能な日本語フォントが見つかりました: {font}")
             return font
 
-    print("⚠️ 日本語対応フォントが見つかりません。デフォルトフォントを使用します。")
-    return None  # フォントなしでも実行可能にする
+    print("⚠️ 適切な日本語フォントが見つかりません。デフォルトフォントを使用します。")
+    return None  # フォントなしでも実行できるようにする
 
-UNICODE_FONT_PATH = get_unicode_font()
+japanese_font_path = get_valid_japanese_font()
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -71,7 +72,7 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（Arial Unicode 適用）"""
+    """✅ PDF の白い文字を赤に変換（UTF-8対応 & 日本語フォント対応）"""
     doc = fitz.open(input_pdf)
 
     for page in doc:
@@ -86,29 +87,30 @@ def process_pdf(input_pdf, output_pdf):
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
                         fontname = span.get("font", "helv")  # ✅ 元のフォントを取得
+                        rect = fitz.Rect(origin[0], origin[1] - size, origin[0] + 200, origin[1])  # 適当な範囲
 
+                        # ✅ UTF-8 デバッグ
                         print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
                         try:
-                            # ✅ PyMuPDF がサポートしていないフォントは Arial Unicode に置き換え
-                            if fontname.startswith("HiraKakuProN"):  
-                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial Unicode に置き換えます。")
-                                fontname = "Arial Unicode MS"
+                            # ✅ PyMuPDF が認識できないフォントは Arial に置き換え
+                            if fontname.startswith("HiraKakuProN") or fontname.startswith("MS Gothic"):
+                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial に置き換えます。")
+                                fontname = "Arial"  
 
-                            # ✅ フォント適用処理（Unicode フォント適用）
-                            if UNICODE_FONT_PATH:
-                                page.insert_text(origin, text,
-                                                 fontsize=size,
-                                                 color=(1, 0, 0),
-                                                 fontname="Arial Unicode MS",  # ✅ Arial Unicode MS を指定
-                                                 fontfile=UNICODE_FONT_PATH,  # ✅ フォントファイルを明示的に適用
-                                                 overlay=True)
+                            # ✅ `insert_textbox` を使い、日本語フォントを明示的に指定
+                            if japanese_font_path:
+                                page.insert_textbox(rect, text,
+                                                    fontsize=size,
+                                                    color=(1, 0, 0),  # 赤色
+                                                    fontfile=japanese_font_path,  # ✅ フォントを適用
+                                                    align=fitz.TEXT_ALIGN_LEFT)
                             else:
-                                page.insert_text(origin, text,
-                                                 fontsize=size,
-                                                 color=(1, 0, 0),
-                                                 fontname="helv",  # ✅ 既存フォントを使用
-                                                 overlay=True)
+                                page.insert_textbox(rect, text,
+                                                    fontsize=size,
+                                                    color=(1, 0, 0),  # 赤色
+                                                    fontname=fontname,  # ✅ Arial またはデフォルトフォント
+                                                    align=fitz.TEXT_ALIGN_LEFT)
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
 
