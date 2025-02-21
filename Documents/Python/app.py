@@ -16,28 +16,25 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["OUTPUT_FOLDER"] = OUTPUT_FOLDER
 app.config["ALLOWED_EXTENSIONS"] = {"pdf"}
 
-# ✅ 利用可能なフォントを取得（.ttf のみ）
-def get_valid_japanese_font():
-    """利用可能なフォントを検索し、.ttf を優先して取得"""
+# ✅ Arial フォントのパスを自動検出
+def get_arial_font():
+    """利用可能な Arial フォントを検索し、最適なものを選択"""
     font_candidates = [
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",  # macOS ✅ 推奨
-        "/Library/Fonts/Osaka.ttf",  # macOS
-        "/System/Library/Fonts/Supplemental/Hiragino Sans GB.ttf",  # macOS
-        "/System/Library/Fonts/Supplemental/HiraginoSans-W3.ttc",  # macOS ⚠ TTCは不完全
-        "C:/Windows/Fonts/MS Gothic.ttf",  # Windows ✅ 推奨
-        "C:/Windows/Fonts/YuGothM.ttc",  # Windows ⚠ TTCは不完全
-        "/usr/share/fonts/opentype/ipafont-gothic/ipag.ttf",  # Linux ✅ 推奨
+        "/System/Library/Fonts/Supplemental/Arial.ttf",  # macOS ✅
+        "C:/Windows/Fonts/Arial.ttf",  # Windows ✅
+        "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",  # Linux (Ubuntu)
+        "/usr/share/fonts/truetype/msttcorefonts/arial.ttf",  # Linux (Debian)
     ]
 
     for font in font_candidates:
         if os.path.exists(font):
-            print(f"✅ 利用可能なフォントが見つかりました: {font}")
+            print(f"✅ Arial フォントが見つかりました: {font}")
             return font
 
-    print("⚠️ 適切な日本語フォントが見つかりません。デフォルトフォントを使用します。")
+    print("⚠️ Arial フォントが見つかりません。デフォルトフォントを使用します。")
     return None  # フォントなしでも実行できるようにする
 
-japanese_font_path = get_valid_japanese_font()
+ARIAL_FONT_PATH = get_arial_font()
 
 # ✅ PDF ファイルの拡張子チェック
 def allowed_file(filename):
@@ -73,7 +70,7 @@ def upload_file():
     return "許可されていないファイル形式です", 400
 
 def process_pdf(input_pdf, output_pdf):
-    """✅ PDF の白い文字を赤に変換（UTF-8対応）"""
+    """✅ PDF の白い文字を赤に変換（Arial 適用）"""
     doc = fitz.open(input_pdf)
 
     for page in doc:
@@ -88,29 +85,28 @@ def process_pdf(input_pdf, output_pdf):
                         size = span["size"]
                         origin = span.get("origin", (span["bbox"][0], span["bbox"][3]))
                         fontname = span.get("font", "helv")  # ✅ 元のフォントを取得
-                        
-                        # ✅ UTF-8 デバッグ
+
                         print(f"処理中: {text.encode('utf-8')} at {origin} | Font: {fontname}")
 
                         try:
-                            # ✅ PyMuPDF が認識できないフォントは Helvetica に置き換え
+                            # ✅ PyMuPDF がサポートしていないフォントは Arial に置き換え
                             if fontname.startswith("HiraKakuProN"):  
-                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Helvetica に置き換えます。")
-                                fontname = "helv"  
+                                print(f"⚠️ '{fontname}' は PyMuPDF でサポートされていません。Arial に置き換えます。")
+                                fontname = "Arial"
 
                             # ✅ フォント適用処理
-                            if japanese_font_path:
+                            if ARIAL_FONT_PATH:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname=fontname,  # ✅ フォント名を指定
-                                                 fontfile=japanese_font_path,  # ✅ 明示的にフォント適用
+                                                 fontname="Arial",  # ✅ Arial を指定
+                                                 fontfile=ARIAL_FONT_PATH,  # ✅ Arial のフォントファイルを明示的に適用
                                                  overlay=True)
                             else:
                                 page.insert_text(origin, text,
                                                  fontsize=size,
                                                  color=(1, 0, 0),
-                                                 fontname=fontname,  # ✅ 既存フォントを使用
+                                                 fontname="helv",  # ✅ 既存フォントを使用
                                                  overlay=True)
                         except Exception as e:
                             print(f"❌ フォント適用エラー: {e}")
